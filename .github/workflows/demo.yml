@@ -26,13 +26,19 @@ jobs:
           # history, so a shallow clone would leave it nothing to compare.
           fetch-depth: 0
 
+      # @main, not @v1: skill-evaluator has no tags or releases yet. Move both
+      # this ref and install-spec to the tag once it cuts one -- tracking main
+      # means a change there can turn this build red without a commit here.
       - name: Evaluate the demo skills
         id: eval
-        uses: EmadMokhtar/skill-evaluator@v1
+        uses: EmadMokhtar/skill-evaluator@main
         with:
           path: ./skills
           config: ./skill-eval.toml
           markdown-max-chars: "60000"
+          # The action's default install-spec is the PyPI name, which does not
+          # exist yet.
+          install-spec: "skill-eval[pydantic-ai] @ git+https://github.com/EmadMokhtar/skill-evaluator@main"
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
