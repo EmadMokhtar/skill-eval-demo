@@ -61,13 +61,18 @@ cases:
   #
   # The other side of the same line as the case above: same grammar, one
   # marker that must appear.
+  # The diff is deliberately *not* the archived-orders example the SKILL.md
+  # spells out. An eval whose input matches the instruction's worked example
+  # measures whether the model can copy it, which is not the rule being
+  # claimed. This one is a new required argument -- a different shape of break,
+  # on a different file, in a different subsystem.
   - name: marks a breaking change with a bang and a footer
     task: >-
       Write the commit message for this diff:
 
-          diff --git a/src/api/orders.ts b/src/api/orders.ts
-          -router.get("/orders/:id", ...)   // returned 200 with {archived: true}
-          +router.get("/orders/:id", ...)   // now returns 404 for archived orders
+          diff --git a/src/client.ts b/src/client.ts
+          -export function createClient(opts: Options = {}) {
+          +export function createClient(apiKey: string, opts: Options = {}) {
     tags: [form, breaking]
     assertions:
       - kind: regex
@@ -99,7 +104,11 @@ cases:
         from the diff, naming the session-lifetime change.
       rubric:
         - The reply declines to use "Update auth" as the message
-        - The reply gives a reason that is about the message naming a file or mood rather than a change
+        # The removed entry demanded the reply *explain* why a bare summary is
+        # bad, in terms of naming a file or a mood. The task asks "Good
+        # enough?" -- "Not quite", plus a better message derived from the diff,
+        # is a complete answer to that question. Demanding the rationale on top
+        # of it grades an exposition nobody requested.
         - The reply proposes a replacement subject line in Conventional Commits form
         - The proposed replacement refers to the session lifetime or expiry being shortened
 

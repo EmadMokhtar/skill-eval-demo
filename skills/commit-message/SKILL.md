@@ -25,10 +25,29 @@ always what they did.
   `chore`, `style`, `revert`.
 - **Description** is imperative, lowercase, and ends without a full stop — `add retry on
   timeout`, not `Added retry on timeout.`
-- **Breaking changes** carry `!` after the type or scope: `feat(api)!: return 404 for
-  archived orders`. Add a `BREAKING CHANGE:` footer describing the migration.
 - Keep the subject under 72 characters. Detail belongs in the body, which explains *why* —
   the diff already shows what.
+
+## Ask whether it breaks a caller
+
+Before settling the subject, answer one question about the diff: **would existing code
+calling this still work?** A changed status code, a renamed or removed export, a new
+required argument, a changed default, a narrowed return type — each breaks a caller.
+
+When the answer is no, the message carries both marks:
+
+```
+fix(api)!: return 404 for archived orders
+
+BREAKING CHANGE: GET /orders/:id returned 200 with {archived: true} for archived
+orders and now returns 404. Callers relying on the archived flag should treat 404
+as archived.
+```
+
+The `!` goes after the type or scope; the `BREAKING CHANGE:` footer describes the
+migration. Both, every time — the `!` is what tooling reads, the footer is what the person
+hitting the break reads. This is independent of the type: a `fix` can break a caller just
+as a `feat` can.
 
 ## Pick the type from the change, not the intent
 
@@ -40,8 +59,18 @@ The type describes what the commit does to the codebase:
 - A change only to tests is `test`; a change only to CI config is `ci`.
 
 When a change spans types, name the one that carries the user-visible outcome and describe
-the rest in the body. A commit that genuinely does two unrelated things wants to be two
-commits — say so.
+the rest in the body.
+
+## Account for every hunk
+
+The message covers the whole diff. Before writing it, walk the hunks and check each one is
+described by the subject or the body — a hunk nobody mentioned is a change that lands
+unrecorded, and the log stops being the thing you can read history from.
+
+When a hunk cannot be folded in because it is unrelated to the rest — a cart bug fixed
+alongside a CI runner bump — that diff is two commits. Say so first, propose a subject
+line for each, and let the user decide. Do this even when asked for a single message: one
+message that silently drops half the diff is the outcome this rule exists to prevent.
 
 ## Never write a bare summary
 
