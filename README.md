@@ -58,9 +58,13 @@ one is invisible without a trajectory check.
 
 ## Running it locally
 
+skill-eval is not published to PyPI, so install it from git. The `[pydantic-ai]` extra is
+what supplies the real runner and judge — without it the only runner available is the fake
+one, which reports every `mode: offered` and every judged case as errored.
+
 ```bash
 export OPENAI_API_KEY=...
-pip install "skill-eval[pydantic-ai]"
+pip install "skill-eval[pydantic-ai] @ git+https://github.com/EmadMokhtar/skill-evaluator@main"
 ```
 
 The demo skills:
