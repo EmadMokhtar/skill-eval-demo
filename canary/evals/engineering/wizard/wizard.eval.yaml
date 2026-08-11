@@ -1,0 +1,29 @@
+# Triggering sweep for `wizard`.
+#
+# Description under test: "Generate an interactive bash wizard that walks a
+# human through steps only they can perform. Use when provisioning
+# infrastructure, setting up credentials or CI secrets, walking an unfamiliar
+# third-party dashboard, or running a one-off migration or cutover. Don't
+# invoke this for steps the agent can perform itself."
+#
+# This is the one skill in the sweep whose description carries an explicit
+# anti-trigger, so the negative control tests a sentence the author wrote
+# rather than an inference of ours: setup work the agent can do unaided.
+cases:
+  - name: reaches for the skill on human-only provisioning steps
+    mode: offered
+    task: >-
+      I need to create a Cloudflare R2 bucket, mint an API token for it, and
+      put the credentials into our GitHub Actions secrets. Walk me through it.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves setup the agent can do itself alone
+    mode: offered
+    task: >-
+      Set up a .env file for local development with the defaults from
+      .env.example.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

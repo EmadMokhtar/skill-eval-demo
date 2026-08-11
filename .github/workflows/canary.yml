@@ -1,0 +1,60 @@
+# The canary: our eval suites against real third-party skills, on a schedule.
+#
+# This job never gates. It measures skills nobody here controls, at repeat = 5,
+# and a red result means "go and look" rather than "the build is broken".
+# `continue-on-error` on the eval step is what makes that true in practice --
+# the reports still upload, and the summary still renders.
+#
+# Two identical runs of this exact set scored 80% and 83% with a different set
+# of failures each time. Read the repeat rates, not the headline number.
+name: canary
+
+on:
+  schedule:
+    # Mondays, 06:00 UTC. Weekly, because the thing it watches -- upstream
+    # skills at a pinned SHA and a provider's model behaviour -- does not
+    # change hourly, and each run costs real money.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the pinned upstream tree
+        id: sync
+        run: echo "path=$(./canary/sync.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate the upstream skills
+        id: eval
+        continue-on-error: true
+        uses: EmadMokhtar/skill-evaluator@v1
+        with:
+          path: ${{ steps.sync.outputs.path }}/skills
+          config: ./canary/skill-eval.toml
+          markdown-max-chars: "60000"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-reports
+          path: |
+            skill-eval-report.json
+            skill-eval-junit.xml
+            skill-eval-summary.md
+          if-no-files-found: warn
+
+      - name: Report the outcome without failing the build
+        if: always()
+        run: |
+          echo "pass rate: ${{ steps.eval.outputs.pass-rate }}"
+          echo "exit code: ${{ steps.eval.outputs.exit-code }}"
+          echo "The canary never fails the build. Read the summary above." >> "$GITHUB_STEP_SUMMARY"

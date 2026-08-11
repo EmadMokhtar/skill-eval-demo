@@ -1,0 +1,27 @@
+# Triggering sweep for `migrate-to-shoehorn`.
+#
+# Description under test: "Migrate test files from `as` type assertions to
+# @total-typescript/shoehorn. Use when user mentions shoehorn, wants to replace
+# `as` in tests, or needs partial test data."
+#
+# The negative asks to remove `as` assertions -- but in production code, where
+# shoehorn does not belong. It separates "replace `as`" from "replace `as` in
+# tests", which is the whole of this pointer's scope.
+cases:
+  - name: reaches for the skill on test-file as-assertions
+    mode: offered
+    task: >-
+      Our test files are full of `as User` casts on half-built fixtures.
+      Replace them with proper partial test data.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves production-code casts alone
+    mode: offered
+    task: >-
+      src/api/client.ts has a pile of `as any` casts around the fetch wrapper.
+      Replace them with proper types.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

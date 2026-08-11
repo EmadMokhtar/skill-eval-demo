@@ -1,0 +1,25 @@
+# Triggering sweep for `git-guardrails-claude-code`.
+#
+# Description under test: "Set up Claude Code hooks to block dangerous git
+# commands (push, reset --hard, clean, branch -D, etc.) before they execute."
+#
+# The negative names one of the very commands the description lists, but asks
+# for it to be *performed* rather than *blocked* -- the sharpest available test
+# that the pointer keys on guarding, not on git.
+cases:
+  - name: reaches for the skill when asked to block dangerous git commands
+    mode: offered
+    task: >-
+      Set things up so the agent can't run git push or git reset --hard in this
+      repo without me approving it first.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves an ordinary git operation alone
+    mode: offered
+    task: >-
+      Undo my last commit but keep the changes staged.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

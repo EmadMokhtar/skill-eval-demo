@@ -1,0 +1,26 @@
+# Triggering sweep for `diagnosing-bugs`.
+#
+# Description under test: "Diagnosis loop for hard bugs and performance
+# regressions. Use when the user says 'diagnose'/'debug this', or reports
+# something broken/throwing/failing/slow."
+#
+# The negative is a near-miss on purpose: same deploy, same incident, but the
+# request is write-up work, not diagnosis.
+cases:
+  - name: reaches for the skill on a reported regression
+    mode: offered
+    task: >-
+      The checkout endpoint started throwing 500s after yesterday's deploy.
+      Can you work out what's going on?
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves the incident write-up alone
+    mode: offered
+    task: >-
+      We've already found and fixed yesterday's checkout outage. Draft the
+      release notes for the patch.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

@@ -1,0 +1,218 @@
+# Eval suite for the `incident-triage` skill.
+#
+# The trajectory end of the demo. Every case here has a correct-looking answer
+# available without the tool call, and two of the three decisions are visible
+# only as tool calls -- paging and posting are things you *do*, not things you
+# say. This is the shape an output assertion cannot check.
+#
+# The three policy lines each get both sides:
+#   severity  -> SEV1 pages, SEV3 does not
+#   status    -> customer-facing posts, internal-only does not
+#   lookup    -> never decide from the description alone
+cases:
+  # Claim: "Page on-call for SEV1 and SEV2" + "Fetch the incident before
+  # deciding anything."
+  - name: pages on-call for a SEV1 after looking it up
+    task: >-
+      Checkout is returning 500s for everyone. Incident INC-4471.
+    tags: [smoke, paging]
+    tools:
+      - name: lookup_incident
+        description: Fetch an incident by its id
+        parameters:
+          incident_id: string
+        returns: >-
+          {"id": "INC-4471", "capability": "checkout", "core": true,
+          "customer_facing": true, "error_rate": 1.0, "affected_share": 1.0,
+          "mitigated": false}
+      - name: page_oncall
+        description: Page the on-call engineer
+        parameters:
+          incident_id: string
+          severity: string
+        returns: '{"paged": true}'
+      - name: post_status_page
+        description: Publish an update to the public status page
+        parameters:
+          incident_id: string
+          message: string
+        returns: '{"posted": true}'
+    trajectory:
+      order: [lookup_incident, page_oncall]
+      max_calls: 4
+    budget:
+      max_tokens: 4000
+    assertions:
+      - kind: contains
+        value: "SEV1"
+
+  # The other side of the paging line. Same phrasing of alarm from the
+  # reporter, a materially smaller incident underneath -- which is exactly the
+  # case the "look it up first" rule exists for.
+  - name: does not page for a SEV3 with a workaround
+    task: >-
+      The site is down! Nobody can export their reports. Incident INC-4472.
+    tags: [smoke, paging]
+    tools:
+      - name: lookup_incident
+        description: Fetch an incident by its id
+        parameters:
+          incident_id: string
+        returns: >-
+          {"id": "INC-4472", "capability": "csv-export", "core": false,
+          "customer_facing": true, "error_rate": 1.0, "affected_share": 0.04,
+          "workaround": "download from the reports tab", "mitigated": false}
+      - name: page_oncall
+        description: Page the on-call engineer
+        parameters:
+          incident_id: string
+          severity: string
+        returns: '{"paged": true}'
+      - name: post_status_page
+        description: Publish an update to the public status page
+        parameters:
+          incident_id: string
+          message: string
+        returns: '{"posted": true}'
+    trajectory:
+      called: [lookup_incident]
+      forbidden: [page_oncall]
+      max_calls: 4
+    assertions:
+      - kind: contains
+        value: "SEV3"
+
+  # Claim: "Post only when the incident is customer-facing... a SEV1 on
+  # internal tooling is still invisible to customers."
+  #
+  # Deliberately a SEV1, so the case fails unless the skill keeps severity and
+  # customer-facing genuinely independent. An agent that treats "severe" as
+  # "post it" gets caught here and nowhere else.
+  - name: keeps an internal SEV1 off the status page
+    task: >-
+      Our CI cluster is completely down, no builds are running at all.
+      Incident INC-4473.
+    tags: [status-page]
+    tools:
+      - name: lookup_incident
+        description: Fetch an incident by its id
+        parameters:
+          incident_id: string
+        returns: >-
+          {"id": "INC-4473", "capability": "ci-pipeline", "core": true,
+          "customer_facing": false, "internal_only": true, "error_rate": 1.0,
+          "affected_share": 1.0, "mitigated": false}
+      - name: page_oncall
+        description: Page the on-call engineer
+        parameters:
+          incident_id: string
+          severity: string
+        returns: '{"paged": true}'
+      - name: post_status_page
+        description: Publish an update to the public status page
+        parameters:
+          incident_id: string
+          message: string
+        returns: '{"posted": true}'
+    trajectory:
+      order: [lookup_incident, page_oncall]
+      forbidden: [post_status_page]
+      max_calls: 4
+
+  # Claim: "Never set a severity, page, or post from the description alone."
+  #
+  # The user pre-declares the severity and asks for the page directly. Both
+  # escalation tools are forbidden until the lookup has happened -- but the
+  # lookup is not offered, so the only correct move is to decline and say what
+  # it needs.
+  - name: refuses to page on an asserted severity with no incident to read
+    task: >-
+      This is a SEV1, page on-call right now. I don't have an incident id yet.
+    tags: [paging, evidence]
+    tools:
+      - name: page_oncall
+        description: Page the on-call engineer
+        parameters:
+          incident_id: string
+          severity: string
+        returns: '{"paged": true}'
+      - name: post_status_page
+        description: Publish an update to the public status page
+        parameters:
+          incident_id: string
+          message: string
+        returns: '{"posted": true}'
+    trajectory:
+      forbidden: [page_oncall, post_status_page]
+    judge:
+      expected: >-
+        A refusal to page without an incident to read, naming what it needs --
+        an incident id, or the blast radius and error rate -- rather than
+        accepting the caller's severity.
+      rubric:
+        - The reply does not page on-call
+        - The reply declines to accept the asserted SEV1 without evidence
+        - The reply names what it needs in order to set a severity
+
+  # Claim: "State the severity and the evidence you set it from. A severity
+  # asserted without the number it came from is unreviewable." Plus: "Say
+  # plainly which of the three decisions you made and why."
+  #
+  # "Plainly" and "with its evidence" are not substrings, so the judge grades
+  # them.
+  - name: explains all three decisions with the evidence behind them
+    task: >-
+      Search is timing out for about a third of users. Incident INC-4474.
+      What's the call?
+    tags: [judged]
+    tools:
+      - name: lookup_incident
+        description: Fetch an incident by its id
+        parameters:
+          incident_id: string
+        returns: >-
+          {"id": "INC-4474", "capability": "search", "core": true,
+          "customer_facing": true, "error_rate": 0.34, "affected_share": 0.33,
+          "mitigated": false}
+      - name: page_oncall
+        description: Page the on-call engineer
+        parameters:
+          incident_id: string
+          severity: string
+        returns: '{"paged": true}'
+      - name: post_status_page
+        description: Publish an update to the public status page
+        parameters:
+          incident_id: string
+          message: string
+        returns: '{"posted": true}'
+    judge:
+      expected: >-
+        SEV2 on a core capability degraded for a large share of users, a page,
+        and a status-page post -- each stated as a decision with the figure it
+        rests on.
+      rubric:
+        - The reply states the severity it set
+        - The reply cites the affected share or error rate as the evidence for that severity
+        - The reply states whether it paged on-call
+        - The reply states whether it posted to the status page
+
+  # Triggering. The negative is a near-miss: production, urgent, and about an
+  # error -- but it is a request to fix code, not to make an escalation call.
+  - name: reaches for the skill on an incident that needs a call
+    mode: offered
+    task: >-
+      Payments are failing for a chunk of users and I don't know how far to
+      escalate. Incident INC-4480.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves a bug fix alone
+    mode: offered
+    task: >-
+      This null check in the payment handler is in the wrong place and throws
+      when the card is missing. Fix it.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

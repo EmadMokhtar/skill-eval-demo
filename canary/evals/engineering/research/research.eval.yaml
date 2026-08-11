@@ -1,0 +1,28 @@
+# Triggering sweep for `research`.
+#
+# Description under test: "Investigate a question against high-trust primary
+# sources and capture the findings as a Markdown file in the repo. Use when the
+# user wants a topic researched, docs or API facts gathered, or reading
+# legwork delegated to a background agent."
+#
+# The negative also ends in a Markdown file in the repo, but there is nothing
+# to investigate -- the material is already in the conversation. It isolates
+# the investigation half of the pointer from the write-it-down half.
+cases:
+  - name: reaches for the skill on a docs investigation
+    mode: offered
+    task: >-
+      Find out how Vitest's browser mode handles module mocking -- go to the
+      actual docs, not blog posts -- and write up what you find.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves a conversation summary alone
+    mode: offered
+    task: >-
+      Summarise what we decided about the caching layer in this conversation
+      and save it as docs/decisions/caching.md.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

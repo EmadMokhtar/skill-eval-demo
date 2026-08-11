@@ -1,0 +1,21 @@
+# Config for the demo skills under skills/.
+#
+# gpt-5.6-luna is a reasoning model and rejects any explicit temperature, so
+# both sides send none. Setting 0.0 does not fail -- the provider warns and
+# ignores it -- which is worse than it sounds: the run then samples at the
+# provider default while this file claims it is deterministic.
+default_runner = "pydantic-ai"
+model = "openai:gpt-5.6-luna"
+temperature = "unset"
+
+judge = "pydantic-ai"
+judge_model = "openai:gpt-5.6-luna"
+judge_temperature = "unset"
+
+# These are our own skills, written alongside their cases, so the bar is a real
+# one: every case is expected to pass. When one goes red it is a signal about
+# the skill or the eval, never a third party changing something under us --
+# that is what canary/ is for.
+min_pass_rate = 1.0
+
+concurrency = 4

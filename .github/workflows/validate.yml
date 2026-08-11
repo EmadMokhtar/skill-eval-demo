@@ -1,0 +1,45 @@
+# The gate that runs on every change: structural only, zero cost, no secrets.
+#
+# `skill-eval list` parses every case and validates every assertion kind,
+# regex, tool cross-reference and scaffold placeholder without calling a
+# provider. It is deterministic and free, which is exactly what a pull-request
+# gate should be -- the scored runs live in demo.yml and canary.yml.
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install skill-eval
+        run: pip install "skill-eval[pydantic-ai]"
+
+      - name: Validate the demo suites
+        run: |
+          skill-eval list ./skills
+          # `list` exits 0 on a tree with no cases at all, so assert the count
+          # separately -- a suite that silently stopped being discovered would
+          # otherwise read as a pass.
+          test "$(skill-eval list ./skills | grep -c ' case(s)')" -eq 2
+
+      # Free, and the only thing that catches an upstream rename: sync.sh fails
+      # loudly when a pinned skill no longer has a SKILL.md where our suite
+      # expects one.
+      - name: Prepare the canary tree
+        run: ./canary/sync.sh
+
+      - name: Validate the canary suites
+        run: skill-eval list ./canary/.work/skills

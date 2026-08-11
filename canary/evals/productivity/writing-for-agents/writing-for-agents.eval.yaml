@@ -1,0 +1,181 @@
+# Eval suite for the `writing-for-agents` skill.
+#
+# Almost every claim here is about prose quality, so the judge carries the
+# suite. Where an assertion appears it pins a word the skill committed to, not
+# a phrasing it never promised.
+cases:
+  # Claim: "**Negation** is the failure mode... Prompt the **positive** -- state
+  # the target behaviour ('write one-line comments') so the banned one is never
+  # spoken."
+  #
+  # The smoke case: the single most operational rule in the file.
+  #
+  # The task asks for the reasoning as well as the rewrite. The first run
+  # failed this case on the rationale check while returning a clean,
+  # prohibition-free rewrite -- because the task then said only "tighten this",
+  # and an answer is not wrong for declining to explain what nobody asked for.
+  # The demand belongs in the prompt, not smuggled into the rubric.
+  - name: rewrites prohibitions as positive instructions
+    task: >-
+      Tighten this section of our CLAUDE.md, and tell me what was wrong with
+      the original:
+
+          ## Comments
+          Never write multi-line comments. Don't use block comments above functions.
+          Avoid explaining what the code does.
+    tags: [smoke, negation]
+    judge:
+      expected: >-
+        A rewrite that states the target behaviour directly, plus an
+        explanation that prohibitions make the banned behaviour more available
+        to the model rather than less.
+      rubric:
+        - The reply explains that steering by prohibition makes the forbidden behaviour more available to the model
+        - The rewritten section states what to do rather than what not to do
+        - The rewritten section is free of prohibitions such as never, don't, or avoid
+
+  # Claim: "Hunt **no-ops** sentence by sentence: an instruction the model
+  # already obeys by default pays load to say nothing... When a sentence fails,
+  # delete the whole sentence rather than trim words from it."
+  #
+  # Two lines: one is a genuine no-op, the other is a real convention the
+  # agent could not find by looking. Deleting both would be the wrong answer,
+  # which is what makes this case discriminating.
+  - name: deletes the no-op and keeps the real convention
+    task: >-
+      Which of these AGENTS.md lines are earning their place?
+
+          - Be thorough and write high-quality code.
+          - Our `db.transaction()` helper swallows nested rollbacks, so never nest it.
+    tags: [pruning]
+    judge:
+      expected: >-
+        The first line identified as a no-op and deleted whole; the second kept
+        because the agent could not discover it by looking at the environment.
+      rubric:
+        - The reply identifies the first line as a no-op that does not change behaviour versus the default
+        - The reply deletes the first line rather than rewording or trimming it
+        - The reply keeps the second line
+        # Loosened after the first run rejected "a non-obvious, project-specific
+        # failure mode" -- which says the same thing in different words. The
+        # entry has to be checkable, not a phrasing the model must guess.
+        - The reply justifies keeping the second line on the grounds that it records a non-obvious project-specific fact, however worded
+
+  # Claim: "The **environment** is a source of truth too -- `package.json`
+  # scripts, config files... a document that restates it is a **cache**...
+  # Leave the one-file, one-command lookups to the environment, where they
+  # cannot go stale."
+  - name: leaves a cheap lookup to the environment
+    task: >-
+      I've added this to our CLAUDE.md so the agent doesn't have to go hunting:
+
+          ## Scripts
+          - `pnpm dev` starts the dev server on port 3000
+          - `pnpm test` runs vitest
+          - `pnpm build` runs tsc then vite build
+
+      Good idea?
+    tags: [pruning]
+    judge:
+      expected: >-
+        A no: this is a cache of a one-file lookup the agent can perform, and
+        it will go stale. Cache what the agent cannot find by looking instead.
+      rubric:
+        - The reply advises removing the script list from the document
+        - The reply gives the reason that the agent can read package.json itself
+        - The reply raises the risk that the copy goes stale
+        - The reply says what would be worth documenting instead, namely something the environment does not record
+
+  # Claim: about pointers -- "Front-load the leading word", "One trigger per
+  # branch. Synonyms that rename a single branch are one branch written twice",
+  # "Cut identity the body already carries."
+  #
+  # The draft description below is deliberately back-loaded and padded with
+  # synonyms of one branch.
+  - name: sharpens a weak context pointer
+    task: >-
+      Here's the description for a skill I'm writing. Sharpen it.
+
+          description: This skill is a helpful tool that you should consider using
+          in situations where the user might want to convert, transform, change or
+          migrate a CSV file into a JSON file.
+    tags: [pointers]
+    judge:
+      expected: >-
+        A shorter description that leads with the operative word, keeps one
+        trigger per genuine branch rather than four synonyms for one, and drops
+        the self-reference the body already carries.
+      rubric:
+        - The rewritten description leads with the operative word rather than with self-reference
+        - The rewritten description collapses the synonyms convert, transform, change and migrate into a single trigger
+        - The rewritten description drops phrases that describe it as a skill or tool
+        - The rewritten description is shorter than the original
+
+  # Claim: "Defend in order: **sharpen the bound first** (local and cheap);
+  # only if it is irreducibly fuzzy _and_ you observe the rush, hide the later
+  # steps by splitting the sequence -- and hiding only works across a real
+  # context boundary."
+  #
+  # The user proposes the expensive remedy first. The ordered defence is the
+  # claim; agreeing straight away fails it.
+  - name: sharpens the completion criterion before splitting the document
+    task: >-
+      Step 2 of my skill says "continue until you understand the module", and
+      the agent keeps rushing it to get to step 3. I'm going to split the skill
+      into two files so step 3 isn't visible. Sound right?
+    tags: [completion]
+    judge:
+      expected: >-
+        Sharpen the vague bound first, because it is the local and cheap fix;
+        splitting is the fallback, and only works across a real context
+        boundary.
+      rubric:
+        - The reply identifies the completion criterion as too vague to tell done from not-done
+        - The reply recommends sharpening the criterion before splitting the document
+        - The reply proposes a concrete checkable replacement for the criterion
+        - The reply states that splitting only helps across a real context boundary such as a hand-off or subagent dispatch
+
+  # Claim: "A **leading word** is a compact concept already living in the
+  # model's pretraining... Hunt for opportunities to refactor with leading
+  # words... a made-up word recruits no priors -- you pay in definition tokens
+  # what a pretrained word gives free; reach for an existing word first."
+  # Same correction as the negation case: the rationale check only holds if the
+  # prompt asks for a rationale.
+  - name: collapses a restated triad into a leading word
+    task: >-
+      This phrase shows up in three places in my skill: "a check that is fast,
+      deterministic and low-overhead". Can I do better, and why does it help?
+    tags: [leading-words]
+    judge:
+      expected: >-
+        Replace the spelled-out triad with a single pretrained word carrying
+        the same meaning, used as a token throughout, rather than coining a new
+        one.
+      rubric:
+        - The reply proposes replacing the three-adjective phrase with a single word
+        - The proposed word is an existing English word rather than a coined term
+        - The reply explains that an existing word recruits priors the model already holds
+
+  # Triggering. The description under test reads:
+  #   "Writing documents for agents. Use when creating or editing skills, or
+  #    modifying AGENTS.md or CLAUDE.md."
+  #
+  # The negative is the sharpest near-miss available: a writing task, about a
+  # technical subject, for human readers.
+  - name: reaches for the skill when editing a CLAUDE.md
+    mode: offered
+    task: >-
+      I'm adding a section to our CLAUDE.md about how the agent should handle
+      database migrations. Help me word it.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves prose for human readers alone
+    mode: offered
+    task: >-
+      Write a blog post introducing TypeScript's satisfies operator to
+      developers who already know generics.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

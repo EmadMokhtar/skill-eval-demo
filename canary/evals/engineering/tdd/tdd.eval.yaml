@@ -1,0 +1,167 @@
+# Eval suite for the `tdd` skill.
+#
+# Every case below traces to a claim the SKILL.md actually makes. The claim is
+# quoted above each case so a red result can be triaged against the source
+# rather than against someone's memory of it.
+cases:
+  # Claim: "Test only at pre-agreed seams. Before writing any test, write down
+  # the seams under test and confirm them with the user. No test is written at
+  # an unconfirmed seam."
+  #
+  # The failure this catches is invisible in the prose: an agent that produces
+  # a lovely test file without ever asking. `forbidden: [write_file]` is the
+  # real check; the assertion just pins the vocabulary the skill commits to.
+  - name: confirms the seams before writing any test
+    task: >-
+      Here's my ShoppingCart class in src/cart.ts. Write tests for it.
+    tags: [smoke, seams]
+    tools:
+      - name: read_file
+        description: Read a file from the repository
+        parameters:
+          path: string
+        returns: |-
+          export class ShoppingCart {
+            private items: Item[] = [];
+            add(item: Item) { this.items.push(item); }
+            total(): number { return this.items.reduce((n, i) => n + i.price, 0); }
+          }
+      - name: write_file
+        description: Write a file to the repository
+        parameters:
+          path: string
+          contents: string
+        returns: '{"ok": true}'
+    trajectory:
+      forbidden: [write_file]
+      max_calls: 4
+    assertions:
+      - kind: regex
+        value: "(?i)seam"
+
+  # Claim: "When exploring the codebase, read `CONTEXT.md` (if it exists) so
+  # test names and interface vocabulary match the project's domain language."
+  #
+  # The task says "cart"; CONTEXT.md says the domain word is "basket". An
+  # answer using "basket" can only have come from reading the file, so this is
+  # a behavioural check, not a check on the fixture.
+  - name: takes its vocabulary from CONTEXT.md
+    task: >-
+      Let's TDD a discount rule for the cart. What's the first test?
+    tags: [context]
+    tools:
+      - name: read_file
+        description: Read a file from the repository
+        parameters:
+          path: string
+        returns: |-
+          # CONTEXT.md
+
+          Ubiquitous language: the pre-checkout collection of items is a **basket**.
+          The word "cart" is not used anywhere in this domain. A `Basket` becomes an
+          `Order` only once payment authorises.
+      - name: write_file
+        description: Write a file to the repository
+        parameters:
+          path: string
+          contents: string
+        returns: '{"ok": true}'
+    trajectory:
+      called: [read_file]
+      forbidden: [write_file]
+    assertions:
+      - kind: regex
+        value: "(?i)basket"
+
+  # Claim: "**Horizontal slicing** -- writing all tests first, then all
+  # implementation... Work in **vertical slices** instead -- one test -> one
+  # implementation -> repeat."
+  #
+  # The user asks for the anti-pattern by name. A skill that just complies has
+  # not survived a plausible prompt.
+  - name: refuses to write every test up front
+    task: >-
+      Write the full test suite for the checkout flow first -- all the cases,
+      happy path and errors -- and once I've reviewed them we'll implement
+      against them.
+    tags: [anti-patterns]
+    judge:
+      expected: >-
+        A push-back that names horizontal slicing as the problem and offers the
+        vertical-slice alternative -- one test, one implementation, repeat --
+        rather than producing the whole suite.
+      rubric:
+        - The reply declines to write the complete test suite up front
+        - The reply gives a reason for declining that is about testing imagined rather than real behaviour
+        - The reply proposes working one test and one implementation at a time
+        # This entry replaces "names or describes the first slice concretely",
+        # which the first run failed. That demand contradicted the skill's own
+        # rule -- "No test is written at an unconfirmed seam" -- so the model
+        # was marked down for obeying the file under test. An eval that
+        # penalises the behaviour the skill mandates is measuring nothing.
+        - The reply asks the user to confirm the seam before any test is written
+
+  # Claim: "**Refactoring is not part of the loop.** It belongs to the review
+  # stage (see the `code-review` skill), not the red -> green implementation
+  # cycle."
+  - name: defers refactoring out of the red-green cycle
+    task: >-
+      The test passes now. Before I write the next one, let's refactor this
+      module -- extracting the duplication is part of the cycle, right?
+    tags: [loop]
+    judge:
+      expected: >-
+        A correction: refactoring is not a step of the red-green loop; it
+        belongs to the review stage.
+      rubric:
+        - The reply states that refactoring is not part of the red-green loop
+        - The reply places refactoring at the review stage rather than the implementation cycle
+        - The reply directs the user to continue the loop with the next test
+
+  # Claim: "**Tautological** -- the assertion recomputes the expected value the
+  # way the code does... Expected values must come from an independent source
+  # of truth."
+  #
+  # A knowledge check: `not_contains` guards the plausible wrong answer, which
+  # here is simply approving the test.
+  - name: names a tautological assertion as tautological
+    task: >-
+      Review this test for me:
+
+          it("applies the discount", () => {
+            const price = 100, rate = 0.2;
+            expect(applyDiscount(price, rate)).toBe(price - price * rate);
+          });
+    tags: [anti-patterns]
+    judge:
+      expected: >-
+        A rejection identifying the assertion as recomputing the expected value
+        the way the implementation does, with a fix that uses an independent
+        expected value.
+      rubric:
+        - The reply identifies the assertion as recomputing the expected value the same way the code does
+        - The reply explains that such a test cannot disagree with the implementation
+        - The reply proposes an expected value from an independent source, such as a literal like 80
+
+  # 3 and 4. Triggering. The description under test reads:
+  #   "Test-driven development. Use when the user wants to build features or fix
+  #    bugs test-first, mentions 'red-green-refactor', or wants integration tests."
+  #
+  # The negative is a deliberate near-miss: real engineering work, in a repo
+  # that has tests, that is not test-first work.
+  - name: reaches for the skill on test-first work
+    mode: offered
+    task: >-
+      I want to build the payment-retry logic test-first. Where do we start?
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves a dependency bump alone
+    mode: offered
+    task: >-
+      Bump our dependencies to the latest minor versions and make sure the
+      lockfile is updated.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

@@ -1,0 +1,14 @@
+# The skills under test. Nothing from this repository is committed here --
+# canary/sync.sh clones it at the pinned commit and copies our eval suites in
+# beside each SKILL.md, because skill-eval discovers eval files next to the
+# skill they test.
+#
+# Bumping SHA is a deliberate pull request. That is the point: the diff of this
+# file is the record of which upstream revision a given canary result describes,
+# and a bump that turns cases red tells you what changed upstream.
+
+# Values are quoted because sync.sh sources this file as shell.
+REPO="https://github.com/mattpocock/skills"
+SHA="84fdeffd12f2ee307994d1eb6feb48173b6e0502"
+DATE="2026-08-06"
+LICENSE="MIT, Copyright (c) 2026 Matt Pocock"

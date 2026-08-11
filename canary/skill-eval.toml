@@ -1,0 +1,24 @@
+# Config for the canary run against the pinned upstream skills.
+#
+# Deliberately different from the root config in two ways, both because this
+# arm measures skills nobody here controls.
+default_runner = "pydantic-ai"
+model = "openai:gpt-5.6-luna"
+temperature = "unset"
+
+judge = "pydantic-ai"
+judge_model = "openai:gpt-5.6-luna"
+judge_temperature = "unset"
+
+# repeat = 5, because a single sample of these suites is not evidence. Two
+# identical runs of this exact set scored 80% and 83% with a *different* set of
+# failures each time -- only one red reproduced with the same cause. Anything
+# read off one sample here is noise wearing a number.
+repeat = 5
+
+# 0.0 -- this arm never gates. It reports. A red canary means "go and look",
+# not "the build is broken", and the workflow carries continue-on-error to
+# match. The gate on this repository is the demo suite under skills/.
+min_pass_rate = 0.0
+
+concurrency = 8

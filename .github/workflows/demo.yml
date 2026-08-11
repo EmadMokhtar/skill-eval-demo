@@ -1,0 +1,48 @@
+# The scored gate, on skills this repository owns.
+#
+# These suites are written alongside their skills, so min_pass_rate = 1.0 in
+# skill-eval.toml: every case is expected to pass, and a red one is a real
+# signal about the skill or the eval. Third-party drift cannot reach this job
+# -- that is what canary.yml is for.
+name: demo
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # --baseline previous resolves a skill's prior version from git
+          # history, so a shallow clone would leave it nothing to compare.
+          fetch-depth: 0
+
+      - name: Evaluate the demo skills
+        id: eval
+        uses: EmadMokhtar/skill-evaluator@v1
+        with:
+          path: ./skills
+          config: ./skill-eval.toml
+          markdown-max-chars: "60000"
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-reports
+          path: |
+            skill-eval-report.json
+            skill-eval-junit.xml
+            skill-eval-summary.md
+          if-no-files-found: warn

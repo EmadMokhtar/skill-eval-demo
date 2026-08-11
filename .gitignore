@@ -1,0 +1,18 @@
+# The canary's prepared tree: a disposable clone of the pinned upstream repo
+# with our eval suites copied in. Rebuilt from scratch by canary/sync.sh, and
+# never committed -- keeping it out is what stops this repository from becoming
+# a fork of somebody else's skills.
+canary/.work/
+
+# Run artifacts. These are per-run evidence, not source; CI uploads them.
+skill-eval-report.json
+skill-eval-junit.xml
+skill-eval-summary.md
+report.json
+report.md
+junit.xml
+
+.venv/
+__pycache__/
+*.pyc
+.DS_Store

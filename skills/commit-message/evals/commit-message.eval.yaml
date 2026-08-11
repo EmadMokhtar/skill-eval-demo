@@ -1,0 +1,152 @@
+# Eval suite for the `commit-message` skill.
+#
+# This is the mechanical end of the demo: the skill commits to a grammar, so
+# `regex` is the right instrument and the judge stays out of it. Every pattern
+# below checks structure the SKILL.md promised in as many words -- none of them
+# pins phrasing the skill never agreed to.
+cases:
+  # Claim: "Run the diff for the staged changes before writing anything."
+  #
+  # An agent that writes a plausible message from the user's description alone
+  # produces output that looks identical to a correct one. Only the trajectory
+  # tells them apart.
+  - name: reads the diff before writing the message
+    task: >-
+      I've staged my changes. Write me a commit message.
+    tags: [smoke, trajectory]
+    tools:
+      - name: git_diff_staged
+        description: Show the staged changes as a patch
+        parameters:
+          path: string
+        returns: |-
+          diff --git a/src/retry.ts b/src/retry.ts
+          +export function withRetry<T>(fn: () => Promise<T>, attempts = 3) {
+          +  // retries a failing call with exponential backoff
+          +}
+    trajectory:
+      called: [git_diff_staged]
+      max_calls: 3
+    assertions:
+      - kind: regex
+        value: '^(feat|fix|docs|refactor|test|perf|build|ci|chore|style|revert)(\([^)]+\))?!?: '
+
+  # Claim: the type "describes what the commit does to the codebase... A new
+  # capability a user can reach is `feat`" -- and the description is
+  # "imperative, lowercase, and ends without a full stop".
+  #
+  # Three separate patterns rather than one clever one, so a failure names
+  # which rule broke.
+  - name: writes an imperative lowercase subject with no full stop
+    task: >-
+      Write the commit subject for this diff:
+
+          diff --git a/src/api/orders.ts b/src/api/orders.ts
+          +router.get("/orders/:id/receipt", async (req, res) => {
+          +  res.json(await buildReceipt(req.params.id));
+          +});
+    tags: [smoke, form]
+    assertions:
+      - kind: regex
+        value: '^feat(\([^)]+\))?: '
+      - kind: regex
+        value: '^[a-z]+(\([^)]+\))?!?: [a-z]'
+      - kind: regex
+        value: '^[^\n]{1,72}$'
+      - kind: not_contains
+        value: "Added"
+
+  # Claim: "**Breaking changes** carry `!` after the type or scope... Add a
+  # `BREAKING CHANGE:` footer describing the migration."
+  #
+  # The other side of the same line as the case above: same grammar, one
+  # marker that must appear.
+  - name: marks a breaking change with a bang and a footer
+    task: >-
+      Write the commit message for this diff:
+
+          diff --git a/src/api/orders.ts b/src/api/orders.ts
+          -router.get("/orders/:id", ...)   // returned 200 with {archived: true}
+          +router.get("/orders/:id", ...)   // now returns 404 for archived orders
+    tags: [form, breaking]
+    assertions:
+      - kind: regex
+        value: '^[a-z]+(\([^)]+\))?!: '
+      - kind: contains
+        value: "BREAKING CHANGE:"
+
+  # Claim: "Never write a bare summary... Given one, rewrite it: read the diff,
+  # then state what changed."
+  #
+  # The user offers the anti-pattern and asks for approval. Complying is the
+  # failure.
+  - name: rewrites a bare summary rather than accepting it
+    task: >-
+      I was going to use "Update auth" as the commit message. Good enough?
+    tags: [anti-patterns]
+    tools:
+      - name: git_diff_staged
+        description: Show the staged changes as a patch
+        parameters:
+          path: string
+        returns: |-
+          diff --git a/src/auth/session.ts b/src/auth/session.ts
+          -const TTL = 60 * 60 * 24 * 30;
+          +const TTL = 60 * 60 * 12;
+    judge:
+      expected: >-
+        A rejection of the bare summary and a replacement subject line derived
+        from the diff, naming the session-lifetime change.
+      rubric:
+        - The reply declines to use "Update auth" as the message
+        - The reply gives a reason that is about the message naming a file or mood rather than a change
+        - The reply proposes a replacement subject line in Conventional Commits form
+        - The proposed replacement refers to the session lifetime or expiry being shortened
+
+  # Claim: "A commit that genuinely does two unrelated things wants to be two
+  # commits -- say so."
+  - name: proposes splitting a commit that does two unrelated things
+    task: >-
+      Write one commit message for this diff:
+
+          diff --git a/src/cart/total.ts b/src/cart/total.ts
+          -  return items.reduce((n, i) => n + i.price, 0);
+          +  return items.reduce((n, i) => n + i.price * i.quantity, 0);
+          diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+          -    runs-on: ubuntu-20.04
+          +    runs-on: ubuntu-latest
+    tags: [scope]
+    judge:
+      expected: >-
+        A note that the diff contains two unrelated changes -- a cart total fix
+        and a CI runner bump -- and should be two commits, with a subject line
+        proposed for each.
+      rubric:
+        - The reply states that the diff contains two unrelated changes
+        - The reply recommends splitting them into two commits
+        - The reply proposes a fix subject line for the cart total change
+        - The reply proposes a ci subject line for the workflow change
+
+  # Triggering. The description under test reads:
+  #   "Write a Conventional Commits subject line for staged changes. Use when
+  #    the user is committing, asks for a commit message, or wants an existing
+  #    message rewritten to the convention."
+  #
+  # The negative is a near-miss: git work, about history, that is not authoring
+  # a message.
+  - name: reaches for the skill when a commit message is wanted
+    mode: offered
+    task: >-
+      I've staged the retry helper. What should the commit message be?
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves history rewriting alone
+    mode: offered
+    task: >-
+      Squash the last three commits on this branch into one and rebase onto
+      main.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

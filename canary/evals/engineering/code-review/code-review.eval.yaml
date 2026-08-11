@@ -1,0 +1,251 @@
+# Eval suite for the `code-review` skill.
+#
+# This is a process skill, so most of what it promises is trajectory, not
+# prose: validate the ref before diffing, stop before the sub-agents when the
+# diff is empty, never ask for a review without a fixed point. Those failures
+# are invisible to an output assertion.
+cases:
+  # Claim: "Whatever the user said is the fixed point... If they didn't specify
+  # one, ask for it."
+  #
+  # The expensive failure is guessing `main` and reviewing the wrong range, so
+  # every git tool is forbidden -- asking has to come before any work.
+  - name: asks for the fixed point instead of guessing one
+    task: Review my changes.
+    tags: [smoke, fixed-point]
+    tools:
+      - name: git_rev_parse
+        description: Resolve a git ref to a commit sha
+        parameters:
+          ref: string
+        returns: '{"sha": "9f1c2ab"}'
+      - name: git_diff
+        description: Run a git diff and return the patch
+        parameters:
+          command: string
+        returns: |-
+          diff --git a/src/cart.ts b/src/cart.ts
+          +  applyDiscount(rate: number) { return this.total() * (1 - rate); }
+      - name: spawn_subagent
+        description: Run a sub-agent with the given prompt and return its report
+        parameters:
+          prompt: string
+        returns: '{"report": "no findings"}'
+    trajectory:
+      forbidden: [git_rev_parse, git_diff, spawn_subagent]
+    assertions:
+      - kind: regex
+        value: "(?i)(commit|branch|tag|ref|fixed point|since)"
+
+  # Claim: "Before going further, confirm the fixed point resolves
+  # (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or
+  # empty diff should fail here -- not inside two parallel sub-agents."
+  - name: resolves the ref before running the diff
+    task: Review the branch since main.
+    tags: [fixed-point]
+    tools:
+      - name: git_rev_parse
+        description: Resolve a git ref to a commit sha
+        parameters:
+          ref: string
+        returns: '{"sha": "9f1c2ab"}'
+      - name: git_diff
+        description: Run a git diff and return the patch
+        parameters:
+          command: string
+        returns: |-
+          diff --git a/src/cart.ts b/src/cart.ts
+          +  applyDiscount(rate: number) { return this.total() * (1 - rate); }
+      - name: spawn_subagent
+        description: Run a sub-agent with the given prompt and return its report
+        parameters:
+          prompt: string
+        returns: '{"report": "Standards: possible Primitive Obsession on rate."}'
+    trajectory:
+      order: [git_rev_parse, git_diff]
+
+  # Same claim, the other side of the line: the diff comes back empty, so the
+  # run must stop here. Spawning the sub-agents anyway is the exact failure the
+  # skill wrote that sentence to prevent, and it costs two agent runs.
+  - name: stops on an empty diff without spawning sub-agents
+    task: Review everything since v2.1.0.
+    tags: [fixed-point]
+    tools:
+      - name: git_rev_parse
+        description: Resolve a git ref to a commit sha
+        parameters:
+          ref: string
+        returns: '{"sha": "4d0e77c"}'
+      - name: git_diff
+        description: Run a git diff and return the patch
+        parameters:
+          command: string
+        returns: ""
+      - name: spawn_subagent
+        description: Run a sub-agent with the given prompt and return its report
+        parameters:
+          prompt: string
+        returns: '{"report": "no findings"}'
+    trajectory:
+      called: [git_diff]
+      forbidden: [spawn_subagent]
+      # 6, not 4. The first run failed here at 5 calls while doing exactly the
+      # right thing: it resolved *both* ends of the range before diffing, which
+      # is the diligence the skill asks for. `forbidden` is what guards against
+      # the loop this limit was reaching for; the number only needs headroom.
+      max_calls: 6
+    judge:
+      expected: >-
+        A report that the diff between v2.1.0 and HEAD is empty and that there
+        is nothing to review, with no review findings presented.
+      rubric:
+        - The reply states that the diff is empty or that there are no changes to review
+        - The reply presents no Standards findings
+        - The reply presents no Spec findings
+
+  # Claim: "Present the two reports under `## Standards` and `## Spec`
+  # headings" -- structure the skill committed to in as many words, so an
+  # assertion is the right instrument.
+  - name: reports both axes under their own headings
+    task: >-
+      Review since main. The spec is at docs/specs/discounts.md.
+    tags: [smoke, axes]
+    tools:
+      - name: git_rev_parse
+        description: Resolve a git ref to a commit sha
+        parameters:
+          ref: string
+        returns: '{"sha": "9f1c2ab"}'
+      - name: git_diff
+        description: Run a git diff and return the patch
+        parameters:
+          command: string
+        returns: |-
+          diff --git a/src/cart.ts b/src/cart.ts
+          +  applyDiscount(rate: number) { return this.total() * (1 - rate); }
+          +  applyStaffDiscount(rate: number) { return this.total() * (1 - rate); }
+      - name: read_file
+        description: Read a file from the repository
+        parameters:
+          path: string
+        returns: |-
+          # Discounts spec
+          Baskets support a single percentage discount. Staff discounts are out of scope.
+      - name: spawn_subagent
+        description: Run a sub-agent with the given prompt and return its report
+        parameters:
+          prompt: string
+        returns: >-
+          {"report": "Duplicated Code: applyDiscount and applyStaffDiscount share
+          the same body. Scope creep: applyStaffDiscount is not in the spec."}
+    assertions:
+      - kind: contains
+        value: "## Standards"
+      - kind: contains
+        value: "## Spec"
+
+  # Claim: "Do **not** merge or rerank findings" and "Don't pick a single
+  # winner across axes -- that's the reranking the separation exists to
+  # prevent." Not a substring; a judge grades it.
+  - name: keeps the two axes separate in its summary
+    task: >-
+      Review since main. The spec is at docs/specs/discounts.md. Give me the
+      single most important problem at the end.
+    tags: [axes, judged]
+    tools:
+      - name: git_rev_parse
+        description: Resolve a git ref to a commit sha
+        parameters:
+          ref: string
+        returns: '{"sha": "9f1c2ab"}'
+      - name: git_diff
+        description: Run a git diff and return the patch
+        parameters:
+          command: string
+        returns: |-
+          diff --git a/src/cart.ts b/src/cart.ts
+          +  applyDiscount(rate: number) { return this.total() * (1 - rate); }
+          +  applyStaffDiscount(rate: number) { return this.total() * (1 - rate); }
+      - name: read_file
+        description: Read a file from the repository
+        parameters:
+          path: string
+        returns: |-
+          # Discounts spec
+          Baskets support a single percentage discount. Staff discounts are out of scope.
+      - name: spawn_subagent
+        description: Run a sub-agent with the given prompt and return its report
+        parameters:
+          prompt: string
+        returns: >-
+          {"report": "Duplicated Code: applyDiscount and applyStaffDiscount share
+          the same body. Scope creep: applyStaffDiscount is not in the spec."}
+    judge:
+      expected: >-
+        Two separately reported axes and a closing summary that names the worst
+        issue within each axis, declining the request to crown one overall
+        winner across them.
+      rubric:
+        - The reply reports Standards findings and Spec findings as separate sections
+        - The closing summary names a worst issue for the Standards axis
+        - The closing summary names a worst issue for the Spec axis
+        - The reply does not declare one single most important problem across both axes
+
+  # Claim: "If the spec is missing, skip the Spec sub-agent and note this in
+  # the final report."
+  - name: notes the missing spec rather than inventing one
+    task: >-
+      Review since main. There's no spec for this work.
+    tags: [axes]
+    tools:
+      - name: git_rev_parse
+        description: Resolve a git ref to a commit sha
+        parameters:
+          ref: string
+        returns: '{"sha": "9f1c2ab"}'
+      - name: git_diff
+        description: Run a git diff and return the patch
+        parameters:
+          command: string
+        returns: |-
+          diff --git a/src/cart.ts b/src/cart.ts
+          +  applyDiscount(rate: number) { return this.total() * (1 - rate); }
+      - name: spawn_subagent
+        description: Run a sub-agent with the given prompt and return its report
+        parameters:
+          prompt: string
+        returns: '{"report": "Standards: possible Primitive Obsession on rate."}'
+    assertions:
+      - kind: regex
+        value: "(?i)no spec"
+    judge:
+      expected: >-
+        A Standards report plus an explicit note that no spec was available, so
+        the Spec axis was skipped -- not a fabricated Spec review.
+      rubric:
+        - The reply reports the Standards axis
+        - The reply states that no spec was available
+        - The reply does not present findings about conformance to a spec
+
+  # Triggering. The description under test is long, but its operative clause is
+  # "Use when the user wants to review a branch, a PR, work-in-progress
+  # changes, or asks to 'review since X'."
+  #
+  # The negative is the near-miss that matters: code work, on a diff, that is
+  # not a review.
+  - name: reaches for the skill on a review request
+    mode: offered
+    task: >-
+      Can you review the work on this branch since it forked off main?
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves a refactor request alone
+    mode: offered
+    task: >-
+      This function has three copies of the same validation block. Refactor it
+      so there's only one.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false

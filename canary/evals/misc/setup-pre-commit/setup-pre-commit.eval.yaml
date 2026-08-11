@@ -1,0 +1,26 @@
+# Triggering sweep for `setup-pre-commit`.
+#
+# Description under test: "Set up Husky pre-commit hooks with lint-staged
+# (Prettier), type checking, and tests in the current repo."
+#
+# The negative asks for the same three checks -- prettier, typecheck, tests --
+# wired into CI rather than into a commit hook. If the pointer keys on the
+# tools rather than on the commit-time boundary, this is where it shows.
+cases:
+  - name: reaches for the skill on a pre-commit hook request
+    mode: offered
+    task: >-
+      Add pre-commit hooks to this repo so Prettier and the typechecker run
+      before anything gets committed.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: true
+
+  - name: leaves CI configuration alone
+    mode: offered
+    task: >-
+      Add a GitHub Actions workflow that runs Prettier, tsc and the test suite
+      on every pull request.
+    tags: [triggering]
+    trajectory:
+      skill_triggered: false
