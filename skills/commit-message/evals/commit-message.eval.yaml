@@ -28,8 +28,14 @@ cases:
       called: [git_diff_staged]
       max_calls: 3
     assertions:
+      # (?m) and the optional leading backtick, because the first run of this
+      # case failed on `feat: add retry helper scaffold` -- the right message,
+      # wrapped in a code span. The skill promises a grammar for the message;
+      # it never promised the message would be the first characters of the
+      # response with no formatting around it. Anchoring on that graded a
+      # presentation choice.
       - kind: regex
-        value: '^(feat|fix|docs|refactor|test|perf|build|ci|chore|style|revert)(\([^)]+\))?!?: '
+        value: '(?m)^\s*`?(feat|fix|docs|refactor|test|perf|build|ci|chore|style|revert)(\([^)]+\))?!?: '
 
   # Claim: the type "describes what the commit does to the codebase... A new
   # capability a user can reach is `feat`" -- and the description is
@@ -47,12 +53,19 @@ cases:
           +});
     tags: [smoke, form]
     assertions:
-      - kind: regex
-        value: '^feat(\([^)]+\))?: '
-      - kind: regex
-        value: '^[a-z]+(\([^)]+\))?!?: [a-z]'
-      - kind: regex
-        value: '^[^\n]{1,72}$'
+      # Each pattern checks one promise the SKILL.md actually makes, and each
+      # is anchored to a *line* rather than to the whole response -- see the
+      # note on the case above. The old '^[^\n]{1,72}$' required the entire
+      # output to be a single line; the skill constrains the subject, not the
+      # response, and that pattern only passed by luck.
+      - kind: regex                                    # a feat, since this adds a capability
+        value: '(?m)^\s*`?feat(\([^)]+\))?: '
+      - kind: regex                                    # description starts lowercase
+        value: '(?m)^\s*`?[a-z]+(\([^)]+\))?!?: [a-z]'
+      - kind: regex                                    # subject stays short
+        value: '(?m)^\s*`?[a-z]+(\([^)]+\))?!?: [^\n]{1,60}$'
+      - kind: regex                                    # and ends without a full stop
+        value: '(?m)^\s*`?[a-z]+(\([^)]+\))?!?: [^\n]*[^.\s]\s*$'
       - kind: not_contains
         value: "Added"
 
@@ -75,8 +88,10 @@ cases:
           +export function createClient(apiKey: string, opts: Options = {}) {
     tags: [form, breaking]
     assertions:
+      # Line-anchored for the same reason, and doubly so here: this answer has
+      # to be multi-line to carry the footer at all.
       - kind: regex
-        value: '^[a-z]+(\([^)]+\))?!: '
+        value: '(?m)^\s*`?[a-z]+(\([^)]+\))?!: '
       - kind: contains
         value: "BREAKING CHANGE:"
 
