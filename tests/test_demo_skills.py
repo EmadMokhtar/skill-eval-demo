@@ -35,10 +35,13 @@ def run_suite(skill_name: str):
 
     Two deliberate departures from the config:
 
-    `retries=0` -- a request that stops matching its cassette raises
-    `CannotOverwriteExistingCassetteException`. With retries on, that surfaces
-    as a misleading `ModelAPIError: Connection error` after two backoff sleeps.
-    No network is involved either way; this just keeps the real cause visible.
+    `retries=0` -- a request that stops matching its cassette is not served from
+    disk, so vcr lets it through and `--block-network` stops it at the socket.
+    That surfaces as `ModelAPIError: Connection error`, which is confusing
+    enough without three of them arriving a backoff apart; `_errored_detail`
+    reads that signature and says "stale cassette" rather than leaving it
+    looking like the provider was unreachable. Nothing reaches the network
+    either way -- verified by emptying a cassette and watching it fail.
 
     `concurrency=1` -- the run must be sequential so one cassette per test
     holds a deterministic set of interactions.
@@ -101,10 +104,19 @@ def _errored_detail(errored) -> str:
             f"\n  A 404 usually means this key has no access to {CONFIG.model!r}. "
             "Change `model` and `judge_model` in skill-eval.toml to one it can reach."
         )
+    elif "Connection error" in joined or "Cannot overwrite" in joined:
+        lines.append(
+            "\n  In replay mode this is a stale cassette, not a network problem: the "
+            "request stopped matching what was recorded, vcr let it through to the "
+            "network, and --block-network stopped it there. Nothing reached the "
+            "provider. If the change that caused it is intended -- an edited task, a "
+            "new case, a changed model -- record again:\n"
+            "    uv run pytest --record-mode=once"
+        )
     else:
         lines.append(
-            "\n  If this says the cassette cannot be overwritten, the recording is "
-            "stale: re-record with `uv run pytest --record-mode=once`."
+            "\n  Not a known signature. The full error is above; if it mentions the "
+            "cassette, re-record with `uv run pytest --record-mode=once`."
         )
     return "\n".join(lines)
 

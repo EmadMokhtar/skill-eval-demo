@@ -28,3 +28,20 @@ testpaths = ["tests"]
 markers = [
     "cassette: replays recorded provider traffic; no network, no key needed",
 ]
+
+# --block-network makes "replay never reaches the provider" enforced rather
+# than assumed: a request that stops matching its cassette fails here instead
+# of quietly going to the network and costing money. It does not get in the way
+# of recording -- pytest-recording only blocks when record_mode is "none", so
+# `--record-mode=once` still reaches the provider.
+addopts = "--block-network"
+
+filterwarnings = [
+    # pydantic_graph calls asyncio.get_event_loop() from sync context, which
+    # Python 3.12+ deprecates when no loop is running. It reaches us through
+    # pydantic-ai's run_sync, is not ours to fix, and 2.28.0 is the current
+    # release -- there is no upgrade that clears it. Scoped to the exact
+    # message and module so a real warning from anywhere else still shows.
+    # Matches skill-evaluator's own filter; drop both when it is fixed upstream.
+    "ignore:There is no current event loop:DeprecationWarning:pydantic_graph._utils",
+]
