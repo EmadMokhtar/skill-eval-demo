@@ -59,6 +59,56 @@ def run_suite(skill_name: str):
     return run_evals(skills, [runner], judge=judge, concurrency=1)
 
 
+def _errored_detail(errored) -> str:
+    """Explain *why* cases errored, and say which layer to go and look at.
+
+    Listing the case names alone is useless here: when the runner cannot reach
+    the provider at all, every case in the suite errors and the list is just
+    the suite back again. The error text is the diagnostic, and it lives on
+    `outcome.result.error` -- runners never raise for provider failures, they
+    report them there.
+
+    Errors are grouped because they are almost always all the same one. A bad
+    key produces fourteen identical 401s, and fourteen copies of it buries the
+    single fact worth reading.
+    """
+    grouped: dict[str, list[str]] = {}
+    for outcome in errored:
+        # An evaluator can error too -- a judge endpoint returning 500 -- in
+        # which case the runner is fine and RunResult.error is empty. Fall back
+        # to the failing evaluator's own detail so that case is not reported as
+        # a runner problem it isn't.
+        reason = getattr(outcome.result, "error", None) or next(
+            (s.detail for s in outcome.scores if s.detail and not s.passed),
+            "no error recorded",
+        )
+        grouped.setdefault(reason, []).append(outcome.case_name)
+
+    lines = [f"{len(errored)} case(s) errored -- the runner or judge broke, not the skill."]
+    for reason, names in grouped.items():
+        lines.append(f"\n  {len(names)} case(s): {reason}")
+        lines.append(f"    e.g. {names[0]}")
+
+    joined = " ".join(grouped)
+    if "401" in joined or "invalid_api_key" in joined:
+        lines.append(
+            "\n  A 401 means the key, not the suite. Recording needs a real "
+            "OPENAI_API_KEY exported in *this* shell:\n"
+            "    export OPENAI_API_KEY=<your-key>"
+        )
+    elif "404" in joined or "model_not_found" in joined:
+        lines.append(
+            f"\n  A 404 usually means this key has no access to {CONFIG.model!r}. "
+            "Change `model` and `judge_model` in skill-eval.toml to one it can reach."
+        )
+    else:
+        lines.append(
+            "\n  If this says the cassette cannot be overwritten, the recording is "
+            "stale: re-record with `uv run pytest --record-mode=once`."
+        )
+    return "\n".join(lines)
+
+
 def assert_suite_is_green(report, expected_cases: int):
     """Assert the whole suite passed, distinguishing the ways it can fail.
 
@@ -71,8 +121,8 @@ def assert_suite_is_green(report, expected_cases: int):
     The case count is asserted too. A suite that silently stopped being
     discovered would otherwise sail through every other check on an empty run.
     """
-    errored = [o.case_name for o in report.candidate_outcomes if o.status == "errored"]
-    assert not errored, f"cases errored (suspect a stale cassette): {errored}"
+    errored = [o for o in report.candidate_outcomes if o.status == "errored"]
+    assert not errored, _errored_detail(errored)
 
     failed = [o.case_name for o in report.candidate_outcomes if o.status == "failed"]
     assert not failed, f"cases failed: {failed}"
