@@ -1,0 +1,30 @@
+# This repository is not a Python package -- it is skills, eval suites, and a
+# test harness that replays them. `package = false` keeps uv from trying to
+# build and install it; `uv sync` just resolves the dev group.
+[project]
+name = "skill-eval-demo"
+version = "0"
+description = "Worked example and dogfood harness for skill-eval."
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    # skill-eval is not published to PyPI, so it comes from git. The
+    # [pydantic-ai] extra supplies the real runner and judge -- without it the
+    # only runner is the fake one, which reports every offered and judged case
+    # as errored.
+    "skill-eval[pydantic-ai] @ git+https://github.com/EmadMokhtar/skill-evaluator@main",
+    "pytest>=8",
+    "pytest-recording>=0.13",
+    "vcrpy>=8.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "cassette: replays recorded provider traffic; no network, no key needed",
+]

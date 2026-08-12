@@ -10,12 +10,33 @@ to be both in one job produces a build nobody trusts.
 | | `skills/` | `canary/` |
 | --- | --- | --- |
 | Subject | Skills this repo owns | [mattpocock/skills](https://github.com/mattpocock/skills), pinned |
-| Runs on | Every pull request | Weekly, and on demand |
+| Live run | Weekly, and on demand | Weekly, and on demand |
 | Gates the build | Yes, at 100% | Never |
 | Samples per case | 1 | 5 (`repeat`) |
 
-Every change also passes through `validate.yml`, which parses every case with
-`skill-eval list` — no provider, no secrets, no cost.
+**Every push runs the demo suites for free**, off recorded provider traffic. `validate.yml`
+parses every case with `skill-eval list`, then replays both suites through the real runner
+and judge from cassettes in `tests/cassettes/` — real trajectories, real rubric verdicts,
+no provider, no secret, no cost.
+
+The live runs still matter, which is why they stay on a schedule. A cassette catches
+regressions in the skills, the eval files and skill-eval itself; only a live run catches
+the provider changing its behaviour underneath us. Paying tokens on every push to
+re-learn what a recording already knows buys nothing.
+
+Re-record when a live run goes red and the change is legitimate:
+
+```bash
+export OPENAI_API_KEY=...
+uv run pytest --record-mode=once
+```
+
+Recording is the deliberate, key-bearing act. Replay is the default, so a contributor
+without a key gets skips rather than surprise spend, and a cassette that stops matching
+its request fails loudly rather than quietly going back to the provider. Credentials are
+scrubbed from both sides of the exchange before anything reaches disk — see
+[`tests/conftest.py`](tests/conftest.py), which is the difference between a shared fixture
+and a leak.
 
 ## The demo skills
 
@@ -58,31 +79,42 @@ one is invisible without a trajectory check.
 
 ## Running it locally
 
-skill-eval is not published to PyPI, so install it from git. The `[pydantic-ai]` extra is
-what supplies the real runner and judge — without it the only runner available is the fake
-one, which reports every `mode: offered` and every judged case as errored.
+Everything runs through [uv](https://docs.astral.sh/uv/). One sync installs skill-eval
+and the test harness — no virtualenv to activate, no global installs.
+
+```bash
+uv sync
+```
+
+skill-eval comes from git rather than PyPI, where it is not published, with the
+`[pydantic-ai]` extra that supplies the real runner and judge; without it the only runner
+available is the fake one, which reports every `mode: offered` and every judged case as
+errored. Both are pinned in [`pyproject.toml`](pyproject.toml).
+
+**Free and offline** — no key needed, and what CI runs on every push:
+
+```bash
+uv run pytest -rs
+```
+
+```bash
+uv run skill-eval list ./skills
+```
+
+**Against the live provider** — costs about a cent per run:
 
 ```bash
 export OPENAI_API_KEY=...
-pip install "skill-eval[pydantic-ai] @ git+https://github.com/EmadMokhtar/skill-evaluator@main"
 ```
 
-The demo skills:
-
 ```bash
-skill-eval run ./skills --config skill-eval.toml --markdown-output report.md
+uv run skill-eval run ./skills --config skill-eval.toml --markdown-output report.md
 ```
 
 The canary, against the pinned upstream:
 
 ```bash
-skill-eval run "$(./canary/sync.sh)/skills" --config canary/skill-eval.toml --markdown-output report.md
-```
-
-Structure only, free and offline:
-
-```bash
-skill-eval list ./skills
+uv run skill-eval run "$(./canary/sync.sh)/skills" --config canary/skill-eval.toml --markdown-output report.md
 ```
 
 ## Notes

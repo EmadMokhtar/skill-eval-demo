@@ -1,9 +1,16 @@
-# The gate that runs on every change: structural only, zero cost, no secrets.
+# The gate that runs on every change: free, offline, deterministic, no key.
 #
-# `skill-eval list` parses every case and validates every assertion kind,
-# regex, tool cross-reference and scaffold placeholder without calling a
-# provider. It is deterministic and free, which is exactly what a pull-request
-# gate should be -- the scored runs live in demo.yml and canary.yml.
+# Two layers, both zero-cost:
+#   1. `skill-eval list` parses every case and validates every assertion kind,
+#      regex, tool cross-reference and scaffold placeholder without a provider.
+#   2. The cassette tests replay recorded traffic through the real runner and
+#      judge, so every push gets the actual suites -- trajectories and rubric
+#      verdicts included -- without paying tokens to re-learn what a recording
+#      already knows.
+#
+# The live provider run lives in demo.yml, on a schedule. Cassettes catch
+# regressions in the skills, the eval files and skill-eval itself; only a live
+# run catches the provider moving underneath us.
 name: validate
 
 on:
@@ -14,32 +21,29 @@ on:
 permissions:
   contents: read
 
-env:
-  # skill-eval is not on PyPI, so it installs from git. Swap this for the
-  # plain "skill-eval[pydantic-ai]" once it publishes, and pin the ref rather
-  # than tracking main once it tags a release.
-  SKILL_EVAL_SPEC: "skill-eval[pydantic-ai] @ git+https://github.com/EmadMokhtar/skill-evaluator@main"
-
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      # Pinned to an exact release: setup-uv's floating major tags stop at v7
+      # while releases are past v10, so @v10 would not resolve.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.0
         with:
-          python-version: "3.13"
+          enable-cache: true
 
-      - name: Install skill-eval
-        run: pip install "$SKILL_EVAL_SPEC"
+      - name: Sync the environment
+        run: uv sync
 
       - name: Validate the demo suites
         run: |
-          skill-eval list ./skills
+          uv run skill-eval list ./skills
           # `list` exits 0 on a tree with no cases at all, so assert the count
           # separately -- a suite that silently stopped being discovered would
           # otherwise read as a pass.
-          test "$(skill-eval list ./skills | grep -c ' case(s)')" -eq 2
+          test "$(uv run skill-eval list ./skills | grep -c ' case(s)')" -eq 2
 
       # Free, and the only thing that catches an upstream rename: sync.sh fails
       # loudly when a pinned skill no longer has a SKILL.md where our suite
@@ -48,4 +52,10 @@ jobs:
         run: ./canary/sync.sh
 
       - name: Validate the canary suites
-        run: skill-eval list ./canary/.work/skills
+        run: uv run skill-eval list ./canary/.work/skills
+
+      # Replay-only. Never records, never reaches the network, and skips rather
+      # than fails if a cassette was never recorded -- a missing recording says
+      # nothing about the skill.
+      - name: Replay the demo suites
+        run: uv run pytest -rs

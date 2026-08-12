@@ -1,15 +1,25 @@
-# The scored gate, on skills this repository owns.
+# The live scored run, on skills this repository owns.
 #
 # These suites are written alongside their skills, so min_pass_rate = 1.0 in
 # skill-eval.toml: every case is expected to pass, and a red one is a real
 # signal about the skill or the eval. Third-party drift cannot reach this job
 # -- that is what canary.yml is for.
+#
+# Deliberately NOT on every push. The same suites replay from cassettes in
+# validate.yml for free, so per-push spend would buy nothing: a recording
+# already knows how the model answered. What this job adds is the one thing a
+# cassette cannot -- catching the provider changing its behaviour underneath
+# us. That is a weekly question, not a per-commit one.
+#
+# Re-record the cassettes when this goes red and the change is legitimate:
+#   uv run pytest --record-mode=once
 name: demo
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  schedule:
+    # Mondays, 05:00 UTC -- an hour before the canary, so the owned suites are
+    # already answered if both need reading on the same morning.
+    - cron: "0 5 * * 1"
   workflow_dispatch:
 
 permissions:
